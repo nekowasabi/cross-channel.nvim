@@ -1,12 +1,7 @@
 import type { Denops } from "https://deno.land/x/denops_std@v6.5.1/mod.ts";
 import * as buffer from "./bufferOperation.ts";
-import { authenticateBluesky, authenticateMastodon } from "./auth.ts";
-import { postToBluesky, postToMastodon, postToX } from "./post.ts";
-import {
-  snsList,
-  drivers,
-  SNS,
-} from "./utils.ts";
+import { authenticateMastodon } from "./auth.ts";
+import { drivers, SNS, snsList } from "./utils.ts";
 import * as n from "https://deno.land/x/denops_std@v6.5.1/function/nvim/mod.ts";
 import { ensure, is } from "https://deno.land/x/unknownutil@v3.18.1/mod.ts";
 
@@ -181,20 +176,29 @@ export async function main(denops: Denops): Promise<void> {
       "*",
       async (...sns: string[]) => {
         const bufnr = ensure(await n.nvim_get_current_buf(denops), is.Number);
-        const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
+        const lines = await denops.call(
+          "getbufline",
+          bufnr,
+          1,
+          "$",
+        ) as string[];
         const message = lines.join("\n");
         for (const s of sns) {
           const key = s as SNS;
-          const auth = authenticators[key];
-          if (auth) { try { await auth(denops); } catch (e) { await denops.cmd(`echom "${e.message}"`); continue; } }
-          const poster = posters[key];
-          if (!poster) {
+          const driver = drivers[key];
+          if (!driver) {
             await denops.cmd(`echom "Unknown SNS: ${s}"`);
             continue;
           }
           try {
-            await poster(denops, message);
-          } catch (e) {
+            await driver.authenticate(denops);
+          } catch (e: any) {
+            await denops.cmd(`echom "${e.message}"`);
+            continue;
+          }
+          try {
+            await driver.post(denops, message);
+          } catch (e: any) {
             await denops.cmd(`echom "${e.message}"`);
           }
         }

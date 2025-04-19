@@ -1,7 +1,7 @@
 /// <reference lib="deno.ns" />
 declare const Deno: any;
 import { assertEquals, assert } from "https://deno.land/std@0.115.1/testing/asserts.ts";
-import { postToBluesky, postToMastodon } from "../denops/cross-channel/utils.ts";
+import { postToBluesky, postToMastodon, postToX } from "../denops/cross-channel/utils.ts";
 
 // Fake Denops interface
 class FakeDenops {
@@ -21,12 +21,17 @@ Deno.test("postToBluesky: 正常にリクエストを送信し、成功メッセ
   (Deno.env.get as any) = (_key: string) => fakeHome;
   // Deno.readTextFile をスタブ
   (Deno.readTextFile as any) = async (_path: string) => JSON.stringify(fakeSession);
-  // fetch をスタブ
-  const calls: any[] = [];
-  (globalThis as any).fetch = async (url: string, options: any) => {
-    calls.push({ url, options });
-    return { json: async () => ({}) };
-  };
+  // fetch をスタブ (RequestInfo/RequestInitを使用)
+  type FetchCall = { url: string; options: RequestInit };
+  const calls: FetchCall[] = [];
+  globalThis.fetch = (async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const url = typeof input === "string" ? input : input.toString();
+    calls.push({ url, options: init! });
+    return { json: async () => ({}), ok: true } as Response;
+  }) as typeof fetch;
 
   const text = "Hello\nWorld";
   await postToBluesky(fakeDenops as any, text);
@@ -36,13 +41,14 @@ Deno.test("postToBluesky: 正常にリクエストを送信し、成功メッセ
   assertEquals(calls[0].url, "https://bsky.social/xrpc/com.atproto.repo.createRecord");
   const opts = calls[0].options;
   assertEquals(opts.method, "POST");
-  assertEquals(opts.headers["Authorization"], `Bearer ${fakeSession.accessJwt}`);
-  const body = JSON.parse(opts.body);
+  const headers = opts.headers as Record<string, string>;
+  assertEquals(headers["Authorization"], `Bearer ${fakeSession.accessJwt}`);
+  const body = JSON.parse(opts.body as string);
   assertEquals(body.repo, fakeSession.did);
-  assert(body.record.text.includes("Hello\\nWorld"));
+  assertEquals(body.record.text, text);
 
   // 成功メッセージが denops.cmd で送信されている
-  assertEquals(fakeDenops.cmds.includes("echom \"Post succeeded\""), true);
+  assertEquals(fakeDenops.cmds[0], "echom \"Post succeeded\"");
 });
 
 // Mastodon投稿のユニットテスト
@@ -54,11 +60,16 @@ Deno.test("postToMastodon: 正常にリクエストを送信し、成功メッ�
   (Deno.env.get as any) = (_: string) => fakeHome;
   // セッションファイル読み取りをスタブ
   (Deno.readTextFile as any) = async (_: string) => JSON.stringify(fakeSession);
-  // fetch をスタブ
-  const calls: any[] = [];
-  (globalThis as any).fetch = async (url: string, options: any) => {
-    calls.push({ url, options });
-    return { text: async () => "", ok: true };
+  // fetch をスタブ (any を排除)
+  type FetchCall = { url: string; options: RequestInit };
+  const calls: FetchCall[] = [];
+  globalThis.fetch = async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const url = typeof input === "string" ? input : input.toString();
+    calls.push({ url, options: init! });
+    return { text: async () => "", ok: true } as Response;
   };
 
   const text = "Hello Mastodon";
@@ -69,11 +80,12 @@ Deno.test("postToMastodon: 正常にリクエストを送信し、成功メッ�
   assertEquals(calls[0].url, `https://${fakeSession.host}/api/v1/statuses`);
   const opts = calls[0].options;
   assertEquals(opts.method, "POST");
-  assertEquals(opts.headers["Authorization"], `Bearer ${fakeSession.accessToken}`);
-  assertEquals(opts.headers["Content-Type"], "application/x-www-form-urlencoded");
+  const headers = opts.headers as Record<string, string>;
+  assertEquals(headers["Authorization"], `Bearer ${fakeSession.accessToken}`);
+  assertEquals(headers["Content-Type"], "application/x-www-form-urlencoded");
   // URLSearchParams で空白は + にエンコードされる
-  assert(opts.body.includes("status=Hello+Mastodon"));
+  assertEquals(opts.body, "status=Hello+Mastodon");
 
   // 成功メッセージが denops.cmd で送信されている
-  assertEquals(fakeDenops.cmds.includes("echom \"Mastodon投稿成功\""), true);
+  assertEquals(fakeDenops.cmds[0], "echom \"Mastodon\u30d7\u30ed\u30b0\u30e9\u30e0\u6210\u529f\"");
 });

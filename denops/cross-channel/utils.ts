@@ -7,6 +7,13 @@ import * as n from "https://deno.land/x/denops_std@v6.5.1/function/nvim/mod.ts";
 import * as v from "https://deno.land/x/denops_std@v6.5.1/variable/mod.ts";
 import { ensure, is } from "https://deno.land/x/unknownutil@v3.18.1/mod.ts";
 
+// Base config directory for session files
+const CONFIG_DIR = (() => {
+  const home = Deno.env.get("HOME");
+  if (!home) throw new Error("HOME environment variable is not set");
+  return `${home}/.config/cross-channel`;
+})();
+
 /**
  * Gets the current file path.
  * @param {Denops} denops - The Denops instance.
@@ -44,10 +51,8 @@ export async function authenticateBluesky(denops: Denops): Promise<void> {
   }
   const session = await res.json();
   // セッション情報をファイルに保存
-  const home = Deno.env.get("HOME")!;
-  const dir = `${home}/.config/cross-channel`;
-  await Deno.mkdir(dir, { recursive: true });
-  const file = `${dir}/bluesky_session.json`;
+  await Deno.mkdir(CONFIG_DIR, { recursive: true });
+  const file = `${CONFIG_DIR}/bluesky_session.json`;
   await Deno.writeTextFile(file, JSON.stringify(session, null, 2));
 }
 
@@ -63,8 +68,7 @@ export async function postToBluesky(
   if (!text) {
     return;
   }
-  const home = Deno.env.get("HOME")!;
-  const file = `${home}/.config/cross-channel/bluesky_session.json`;
+  const file = `${CONFIG_DIR}/bluesky_session.json`;
   const session = JSON.parse(await Deno.readTextFile(file));
   const content = text;
   const body = {
@@ -119,10 +123,8 @@ export async function authenticateMastodon(denops: Denops): Promise<void> {
     throw new Error(`Mastodon認証に失敗しました: ${body}`);
   }
   // セッション保存
-  const home = Deno.env.get("HOME")!;
-  const dir = `${home}/.config/cross-channel`;
-  await Deno.mkdir(dir, { recursive: true });
-  const file = `${dir}/mastodon_session.json`;
+  await Deno.mkdir(CONFIG_DIR, { recursive: true });
+  const file = `${CONFIG_DIR}/mastodon_session.json`;
   await Deno.writeTextFile(
     file,
     JSON.stringify({ host, accessToken: token }, null, 2),
@@ -139,8 +141,7 @@ export async function postToMastodon(
   text: string,
 ): Promise<void> {
   if (!text) return;
-  const home = Deno.env.get("HOME")!;
-  const file = `${home}/.config/cross-channel/mastodon_session.json`;
+  const file = `${CONFIG_DIR}/mastodon_session.json`;
   const sess = JSON.parse(await Deno.readTextFile(file));
   const res = await fetch(
     `https://${sess.host}/api/v1/statuses`,

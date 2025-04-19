@@ -117,8 +117,21 @@ export async function openFloatingWindow(
   await denops.cmd(
     `nnoremap <buffer> <CR> <cmd>call denops#notify("${denops.name}", "postFloating", [])<CR>`,
   );
-  // 普通モードで q を押すとウィンドウを閉じる
+  // normal modeで q を押すとウィンドウを閉じる
+  await denops.cmd(`nnoremap <buffer> q <cmd>close<CR>`);
+
+  // 仮想テキストで操作方法を表示
+  const ns = await n.nvim_create_namespace(denops, 'crosschannel');
+  await n.nvim_buf_set_extmark(denops, bufnr, ns, 0, 0, {
+    virt_text: [["<CR> to post", "Comment"], [" q to close", "Comment"]],
+    virt_text_pos: 'eol',
+  });
+  // Insertモードに入ったら操作案内を消す
   await denops.cmd(
-    `nnoremap <buffer> q <cmd>close<CR>`,
+    `autocmd InsertEnter <buffer> lua vim.api.nvim_buf_clear_namespace(${bufnr}, ${ns}, 0, -1)`,
+  );
+  // Normalモードに戻ったら操作案内を再表示
+  await denops.cmd(
+    `autocmd InsertLeave <buffer> lua vim.api.nvim_buf_set_extmark(${bufnr}, ${ns}, 0, 0, { virt_text = { {"<CR> to post","Comment"}, {" q to close","Comment"} }, virt_text_pos = "eol" })`,
   );
 }

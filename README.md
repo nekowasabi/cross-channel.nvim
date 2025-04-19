@@ -27,3 +27,4 @@ This plugin enables cross-posting to Bluesky, Mastodon, and X.com directly from 
   - Opens a floating window and binds <CR> to post to the specified SNS.
 - :CrossChannelPostSelectExec <sns1> [<sns2> ...]
   - Executes posting to the specified SNS for an existing buffer.
+

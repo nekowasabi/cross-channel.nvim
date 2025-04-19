@@ -199,17 +199,21 @@ export async function main(denops: Denops): Promise<void> {
           twitter: postToX,
           x: postToX,
         };
-        for (const s of sns) {
-          const fnPoster = posterMap[s.toLowerCase()];
-          if (fnPoster) {
-            try {
-              await fnPoster(denops, message);
-            } catch (e) {
-              await denops.cmd(`echom "${e.message}"`);
-            }
-          } else {
-            await denops.cmd(`echom "Unknown SNS: ${s}"`);
+        // SNSごとに投稿を実行するヘルパー
+        const postSns = async (snsName: string) => {
+          const fnPoster = posterMap[snsName.toLowerCase()];
+          if (!fnPoster) {
+            await denops.cmd(`echom "Unknown SNS: ${snsName}"`);
+            return;
           }
+          try {
+            await fnPoster(denops, message);
+          } catch (e) {
+            await denops.cmd(`echom "${e.message}"`);
+          }
+        };
+        for (const s of sns) {
+          await postSns(s);
         }
         await denops.cmd(`bdelete! ${bufnr}`);
       },

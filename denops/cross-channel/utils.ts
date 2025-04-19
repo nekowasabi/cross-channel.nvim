@@ -287,9 +287,6 @@ export async function postSelectExec(
       case "mastodon":
         await postToMastodon(denops, prompt);
         break;
-      case "slack":
-        await postToSlack(denops, prompt);
-        break;
       case "twitter":
       case "x":
         await postToX(denops, prompt);

@@ -1,8 +1,14 @@
-import * as fn from "https://deno.land/x/denops_std@v6.5.1/function/mod.ts";
 import type { Denops } from "https://deno.land/x/denops_std@v6.5.1/mod.ts";
 import * as buffer from "./bufferOperation.ts";
-import type { BufferLayout } from "./bufferOperation.ts";
-import { getCurrentFilePath, authenticateBluesky, authenticateMastodon, authenticateSlack, postToBluesky, postToMastodon, postToSlack, postToX } from "./utils.ts";
+import {
+  authenticateBluesky,
+  authenticateMastodon,
+  authenticateSlack,
+  postToBluesky,
+  postToMastodon,
+  postToSlack,
+  postToX,
+} from "./utils.ts";
 import * as n from "https://deno.land/x/denops_std@v6.5.1/function/nvim/mod.ts";
 import { ensure, is } from "https://deno.land/x/unknownutil@v3.18.1/mod.ts";
 
@@ -72,7 +78,8 @@ export async function main(denops: Denops): Promise<void> {
       dispatcherMethod.charAt(0).toUpperCase()
     }${dispatcherMethod.slice(1)}`;
     const completePart = opts.complete ? `-complete=${opts.complete}` : "";
-    const patternPart = opts.pattern ?? (argCount === "*" ? "[<f-args>]" : "[]");
+    const patternPart = opts.pattern ??
+      (argCount === "*" ? "[<f-args>]" : "[]");
 
     await denops.cmd(
       `command! -nargs=${argCount} ${completePart} ${rangePart} ${commandName} call denops#notify("${denops.name}", "${dispatcherMethod}", ${patternPart})`,
@@ -85,21 +92,24 @@ export async function main(denops: Denops): Promise<void> {
 
   const commands: Command[] = [
     await command("post", "0", async () => {
-      const bufnr = ensure(await n.nvim_create_buf(denops, false, true), is.Number);
+      const bufnr = ensure(
+        await n.nvim_create_buf(denops, false, true),
+        is.Number,
+      );
       await buffer.openFloatingWindow(denops, bufnr);
     }),
     // <CR>押下時の投稿処理
     await command("postFloating", "0", async () => {
-        const bufnr = ensure(await n.nvim_get_current_buf(denops), is.Number);
-          // バッファ内容取得
-          const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
-          const prompt = lines.join("\n");
-          // 投稿実行
-          await postToBluesky(denops, prompt);
-          await postToMastodon(denops, prompt);
-          await postToX(denops, prompt);
-          // ウィンドウを閉じる
-          await denops.cmd(`bdelete! ${bufnr}`);
+      const bufnr = ensure(await n.nvim_get_current_buf(denops), is.Number);
+      // バッファ内容取得
+      const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
+      const prompt = lines.join("\n");
+      // 投稿実行
+      await postToBluesky(denops, prompt);
+      await postToMastodon(denops, prompt);
+      await postToX(denops, prompt);
+      // ウィンドウを閉じる
+      await denops.cmd(`bdelete! ${bufnr}`);
     }),
     /**
      * テストコマンドを実行する
@@ -130,12 +140,16 @@ export async function main(denops: Denops): Promise<void> {
       "1",
       async (sns: string) => {
         // SNSごとの認証処理をマップで定義（strategyパターン）
-        const authenticators: Record<string, (denops: Denops) => Promise<void>> = {
+        const authenticators: Record<
+          string,
+          (denops: Denops) => Promise<void>
+        > = {
           bluesky: authenticateBluesky,
           mastodon: authenticateMastodon,
           slack: authenticateSlack,
         };
-        const authenticate = authenticators[sns] ?? ((d) => d.cmd(`echo "Unknown SNS: ${sns}"`));
+        const authenticate = authenticators[sns] ??
+          ((d) => d.cmd(`echo "Unknown SNS: ${sns}"`));
         await authenticate(denops);
       },
       { pattern: "[<f-args>]" },
@@ -145,10 +159,17 @@ export async function main(denops: Denops): Promise<void> {
       "postSelect",
       "*",
       async (...sns: string[]) => {
-        const bufnr = ensure(await n.nvim_create_buf(denops, false, true), is.Number);
+        const bufnr = ensure(
+          await n.nvim_create_buf(denops, false, true),
+          is.Number,
+        );
         await buffer.openFloatingWindow(denops, bufnr);
         // <CR> で postSelectExec を呼び出し
-        await denops.cmd(`nnoremap <buffer> <CR> <cmd>call denops#notify("${denops.name}", "postSelectExec", ${JSON.stringify(sns)})<CR>`);
+        await denops.cmd(
+          `nnoremap <buffer> <CR> <cmd>call denops#notify("${denops.name}", "postSelectExec", ${
+            JSON.stringify(sns)
+          })<CR>`,
+        );
       },
       { pattern: "[<f-args>]" },
     ),
@@ -158,7 +179,12 @@ export async function main(denops: Denops): Promise<void> {
       "*",
       async (...sns: string[]) => {
         const bufnr = ensure(await n.nvim_get_current_buf(denops), is.Number);
-        const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
+        const lines = await denops.call(
+          "getbufline",
+          bufnr,
+          1,
+          "$",
+        ) as string[];
         const prompt = lines.join("\n");
         for (const s of sns) {
           switch (s.toLowerCase()) {

@@ -3,7 +3,7 @@ import * as fn from "https://deno.land/x/denops_std@v6.5.1/function/mod.ts";
 import type { Denops } from "https://deno.land/x/denops_std@v6.5.1/mod.ts";
 import * as buffer from "./bufferOperation.ts";
 import type { BufferLayout } from "./bufferOperation.ts";
-import { getCurrentFilePath, authenticateBluesky, postToBluesky } from "./utils.ts";
+import { getCurrentFilePath, authenticateBluesky, authenticateMastodon, authenticateSlack, postToBluesky, postToMastodon, postToSlack } from "./utils.ts";
 import * as n from "https://deno.land/x/denops_std@v6.5.1/function/nvim/mod.ts";
 import { ensure, is } from "https://deno.land/x/unknownutil@v3.18.1/mod.ts";
 
@@ -99,6 +99,7 @@ export async function main(denops: Denops): Promise<void> {
       const prompt = lines.join("\n");
       // 投稿実行
       await postToBluesky(denops, prompt);
+      await postToMastodon(denops, prompt);
       // ウィンドウを閉じる
       await denops.cmd(`bdelete! ${bufnr}`);
     }),
@@ -130,11 +131,14 @@ export async function main(denops: Denops): Promise<void> {
       "setup",
       "1",
       async (sns: string) => {
-        if (sns === "bluesky") {
-          await authenticateBluesky(denops);
-        } else {
-          await denops.cmd(`echo "Unknown SNS: ${sns}"`);
-        }
+        // SNSごとの認証処理をマップで定義（strategyパターン）
+        const authenticators: Record<string, (denops: Denops) => Promise<void>> = {
+          bluesky: authenticateBluesky,
+          mastodon: authenticateMastodon,
+          slack: authenticateSlack,
+        };
+        const authenticate = authenticators[sns] ?? ((d) => d.cmd(`echo "Unknown SNS: ${sns}"`));
+        await authenticate(denops);
       },
       { pattern: "[<f-args>]" },
     ),

@@ -1,4 +1,6 @@
 /// <reference lib="deno.ns" />
+declare const Deno: any;
+
 import * as fn from "https://deno.land/x/denops_std@v6.5.1/function/mod.ts";
 import type { Denops } from "https://deno.land/x/denops_std@v6.5.1/mod.ts";
 import * as v from "https://deno.land/x/denops_std@v6.5.1/variable/mod.ts";
@@ -129,5 +131,124 @@ export async function postToBluesky(
     await denops.cmd(`echom "Post failed: ${json.error} : ${json.message}"`);
   } else {
     await denops.cmd("echom \"Post succeeded\"");
+  }
+}
+
+/**
+ * Authenticate with Mastodon.
+ * @param {Denops} denops - The Denops instance.
+ * @returns {Promise<void>} A promise that resolves when authentication is complete.
+ */
+export async function authenticateMastodon(denops: Denops): Promise<void> {
+  const host = ensure(await v.g.get(denops, "crosschannel_mastodon_host"), is.String);
+  const token = ensure(await v.g.get(denops, "crosschannel_mastodon_token"), is.String);
+  // トークン検証
+  const url = `https://${host}/api/v1/accounts/verify_credentials`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const body = await res.text();
+  if (res.status !== 200) {
+    throw new Error(`Mastodon認証に失敗しました: ${body}`);
+  }
+  // セッション保存
+  const home = Deno.env.get("HOME")!;
+  const dir = `${home}/.config/cross-channel`;
+  await Deno.mkdir(dir, { recursive: true });
+  const file = `${dir}/mastodon_session.json`;
+  await Deno.writeTextFile(file, JSON.stringify({ host, accessToken: token }, null, 2));
+  await denops.cmd(`echom "Mastodon認証が完了しました (${file})"`);
+}
+
+/**
+ * Posts text content to Mastodon using saved session.
+ * @param {Denops} denops - The Denops instance.
+ * @param {string} text - The content to post.
+ */
+export async function postToMastodon(
+  denops: Denops,
+  text: string,
+): Promise<void> {
+  if (!text) return;
+  const home = Deno.env.get("HOME")!;
+  const file = `${home}/.config/cross-channel/mastodon_session.json`;
+  const sess = JSON.parse(await Deno.readTextFile(file));
+  const res = await fetch(
+    `https://${sess.host}/api/v1/statuses`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Bearer ${sess.accessToken}`,
+      },
+      body: new URLSearchParams({ status: text }).toString(),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.text();
+    await denops.cmd(`echom "Mastodon投稿失敗: ${err}"`);
+  } else {
+    await denops.cmd(`echom "Mastodon投稿成功"`);
+  }
+}
+
+// Slack用の認証処理を追加
+/**
+ * Authenticate with Slack.
+ * @param {Denops} denops - The Denops instance.
+ * @returns {Promise<void>} A promise that resolves when authentication is complete.
+ */
+export async function authenticateSlack(denops: Denops): Promise<void> {
+  const token = ensure(
+    await v.g.get(denops, "crosschannel_slack_token"),
+    is.String,
+  );
+  const channel = ensure(
+    await v.g.get(denops, "crosschannel_slack_channel"),
+    is.String,
+  );
+  const res = await fetch("https://slack.com/api/auth.test", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const json = await res.json();
+  if (!json.ok) {
+    throw new Error(`Slack認証に失敗しました: ${json.error}`);
+  }
+  const home = Deno.env.get("HOME")!;
+  const dir = `${home}/.config/cross-channel`;
+  await Deno.mkdir(dir, { recursive: true });
+  const file = `${dir}/slack_session.json`;
+  await Deno.writeTextFile(file, JSON.stringify({ token, channel }, null, 2));
+  await denops.cmd(`echom "Slack認証が完了しました (${file})"`);
+}
+
+/**
+ * Posts text content to Slack using saved session.
+ * @param {Denops} denops - The Denops instance.
+ * @param {string} text - The content to post.
+ */
+export async function postToSlack(
+  denops: Denops,
+  text: string,
+): Promise<void> {
+  if (!text) return;
+  const home = Deno.env.get("HOME")!;
+  const file = `${home}/.config/cross-channel/slack_session.json`;
+  const sess: { token: string; channel: string } = JSON.parse(
+    await Deno.readTextFile(file),
+  );
+  const body = { channel: sess.channel, text };
+  const res = await fetch("https://slack.com/api/chat.postMessage", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${sess.token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json();
+  if (!json.ok) {
+    await denops.cmd(`echom "Slack投稿失敗: ${json.error}"`);
+  } else {
+    await denops.cmd(`echom "Slack投稿成功"`);
   }
 }

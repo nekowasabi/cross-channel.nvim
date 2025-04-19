@@ -1,9 +1,8 @@
-import { relative } from "https://deno.land/std@0.115.1/path/mod.ts";
 import * as fn from "https://deno.land/x/denops_std@v6.5.1/function/mod.ts";
 import type { Denops } from "https://deno.land/x/denops_std@v6.5.1/mod.ts";
 import * as buffer from "./bufferOperation.ts";
 import type { BufferLayout } from "./bufferOperation.ts";
-import { getCurrentFilePath, authenticateBluesky, authenticateMastodon, authenticateSlack, postToBluesky, postToMastodon, postToSlack } from "./utils.ts";
+import { getCurrentFilePath, authenticateBluesky, authenticateMastodon, authenticateSlack, postToBluesky, postToMastodon, postToSlack, postToX } from "./utils.ts";
 import * as n from "https://deno.land/x/denops_std@v6.5.1/function/nvim/mod.ts";
 import { ensure, is } from "https://deno.land/x/unknownutil@v3.18.1/mod.ts";
 
@@ -22,11 +21,11 @@ export async function main(denops: Denops): Promise<void> {
   /**
    * ArgCountに基づいて異なる型の関数を定義
    * "0"の場合は引数なしの関数、"1"の場合は1つの引数を取る関数、
-   * "*"の場合は2つの引数を取る関数を意味します。
+   * "*"の場合は任意の数の引数を取る関数を意味します。
    */
   type ImplType<T extends ArgCount> = T extends "0" ? () => Promise<void>
     : T extends "1" ? (arg: string) => Promise<void>
-    : (arg: string, arg2: string) => Promise<void>; // MEMO: ArgCountは*だが現状2つのみ対応している
+    : (...args: string[]) => Promise<void>;
 
   /**
    * コマンドのオプションを定義
@@ -93,15 +92,16 @@ export async function main(denops: Denops): Promise<void> {
     }),
     // <CR>押下時の投稿処理
     await command("postFloating", "0", async () => {
-      const bufnr = ensure(await n.nvim_get_current_buf(denops), is.Number);
-      // バッファ内容取得
-      const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
-      const prompt = lines.join("\n");
-      // 投稿実行
-      await postToBluesky(denops, prompt);
-      await postToMastodon(denops, prompt);
-      // ウィンドウを閉じる
-      await denops.cmd(`bdelete! ${bufnr}`);
+        const bufnr = ensure(await n.nvim_get_current_buf(denops), is.Number);
+          // バッファ内容取得
+          const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
+          const prompt = lines.join("\n");
+          // 投稿実行
+          await postToBluesky(denops, prompt);
+          await postToMastodon(denops, prompt);
+          await postToX(denops, prompt);
+          // ウィンドウを閉じる
+          await denops.cmd(`bdelete! ${bufnr}`);
     }),
     /**
      * テストコマンドを実行する

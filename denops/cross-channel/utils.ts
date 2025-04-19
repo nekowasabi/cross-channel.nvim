@@ -252,3 +252,82 @@ export async function postToSlack(
     await denops.cmd(`echom "Slack投稿成功"`);
   }
 }
+
+/**
+ * Posts text content to x.com (formerly Twitter) using OAuth1.0a User Context.
+ * @param {Denops} denops - The Denops instance.
+ * @param {string} text - The content to post.
+ */
+export async function postToX(
+  denops: Denops,
+  text: string,
+): Promise<void> {
+  if (!text) return;
+  // OAuth1.0a User Contextでステータス投稿
+  const consumerKey = ensure(await v.g.get(denops, "crosschannel_x_consumer_key"), is.String);
+  const consumerSecret = ensure(await v.g.get(denops, "crosschannel_x_consumer_secret"), is.String);
+  const accessToken = ensure(await v.g.get(denops, "crosschannel_x_access_token"), is.String);
+  const accessTokenSecret = ensure(await v.g.get(denops, "crosschannel_x_access_token_secret"), is.String);
+  const oauth_nonce = Array.from({ length: 32 }, () => Math.floor(Math.random() * 36).toString(36)).join("");
+  const oauth_timestamp = Math.floor(Date.now() / 1000).toString();
+  const url = "https://api.twitter.com/2/tweets";
+  const percentEncode = (s: string) =>
+    encodeURIComponent(s).replace(/[!*'()]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  const oauthParams: Record<string, string> = {
+    oauth_consumer_key: consumerKey,
+    oauth_token: accessToken,
+    oauth_nonce,
+    oauth_timestamp,
+    oauth_signature_method: "HMAC-SHA1",
+    oauth_version: "1.0",
+  };
+  // OAuth1.0aではJSONボディは署名に含めないため、パラメータはoauthParamsのみ
+  const sortedParams = Object.keys(oauthParams)
+    .sort()
+    .map((k) => `${percentEncode(k)}=${percentEncode(oauthParams[k])}`)
+    .join("&");
+  const baseString = ["POST", percentEncode(url), percentEncode(sortedParams)].join("&");
+  const signingKey = `${percentEncode(consumerSecret)}&${percentEncode(accessTokenSecret)}`;
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(signingKey),
+    { name: "HMAC", hash: "SHA-1" },
+    false,
+    ["sign"],
+  );
+  const signatureData = await crypto.subtle.sign(
+    "HMAC",
+    cryptoKey,
+    new TextEncoder().encode(baseString),
+  );
+  const oauth_signature = btoa(String.fromCharCode(...new Uint8Array(signatureData)));
+  oauthParams.oauth_signature = oauth_signature;
+  const authHeader =
+    "OAuth " +
+    Object.entries(oauthParams)
+      .map(([k, v]) => `${percentEncode(k)}="${percentEncode(v)}"`)
+      .join(", ");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: authHeader,
+    },
+    body: JSON.stringify({ text }),
+  });
+  const json = await res.json();
+  if (json.status === 403 && json.type === "https://api.twitter.com/2/problems/unsupported-authentication") {
+    // Unsupported Authentication: OAuth2 Application-Onlyは使えません
+    await denops.cmd(
+      `echom "X.com認証エラー: OAuth2 Application-Onlyはこのエンドポイントで使用不可。OAuth1.0aユーザーコンテキストまたはOAuth2ユーザーコンテキストのトークンに切り替えてください。詳細: https://developer.x.com/en/support/x-api/error-troubleshooting#unsupported-authentication"`
+    );
+  } else if (Array.isArray((json as any).errors) && (json as any).errors[0]?.code === 453) {
+    // アクセス権限不足 (code 453)
+    await denops.cmd(
+      `echom "X.com投稿失敗: アクセス権限不足 (code 453)。Elevated Accessが必要です: https://developer.x.com/en/portal/product"`
+    );
+  } else {
+    // 投稿 ID を表示
+    await denops.cmd(`echom "X.com投稿成功: ${json.id}"`);
+  }
+}

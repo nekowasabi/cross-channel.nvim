@@ -37,9 +37,7 @@ export async function main(denops: Denops): Promise<void> {
    * @property {boolean} [range] - 範囲指定が可能かどうかを示します。
    */
   type Opts<T extends ArgCount> = {
-    pattern?: T extends "0" ? undefined
-      : T extends "1" ? "[<f-args>]"
-      : "[<line1>, <line2>]";
+    pattern?: T extends "0" ? undefined : "[<f-args>]";
     complete?: T extends "1" ? "file" | "shellcmd" : undefined;
     range?: T extends "*" ? boolean : undefined;
   };
@@ -74,7 +72,7 @@ export async function main(denops: Denops): Promise<void> {
       dispatcherMethod.charAt(0).toUpperCase()
     }${dispatcherMethod.slice(1)}`;
     const completePart = opts.complete ? `-complete=${opts.complete}` : "";
-    const patternPart = opts.pattern ?? "[]";
+    const patternPart = opts.pattern ?? (argCount === "*" ? "[<f-args>]" : "[]");
 
     await denops.cmd(
       `command! -nargs=${argCount} ${completePart} ${rangePart} ${commandName} call denops#notify("${denops.name}", "${dispatcherMethod}", ${patternPart})`,
@@ -139,6 +137,49 @@ export async function main(denops: Denops): Promise<void> {
         };
         const authenticate = authenticators[sns] ?? ((d) => d.cmd(`echo "Unknown SNS: ${sns}"`));
         await authenticate(denops);
+      },
+      { pattern: "[<f-args>]" },
+    ),
+    // SNS選択投稿コマンド: 引数で指定したSNSに投稿する
+    await command(
+      "postSelect",
+      "*",
+      async (...sns: string[]) => {
+        const bufnr = ensure(await n.nvim_create_buf(denops, false, true), is.Number);
+        await buffer.openFloatingWindow(denops, bufnr);
+        // <CR> で postSelectExec を呼び出し
+        await denops.cmd(`nnoremap <buffer> <CR> <cmd>call denops#notify("${denops.name}", "postSelectExec", ${JSON.stringify(sns)})<CR>`);
+      },
+      { pattern: "[<f-args>]" },
+    ),
+    // SNS投稿実行コマンド: postSelect で指定された SNS に投稿
+    await command(
+      "postSelectExec",
+      "*",
+      async (...sns: string[]) => {
+        const bufnr = ensure(await n.nvim_get_current_buf(denops), is.Number);
+        const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
+        const prompt = lines.join("\n");
+        for (const s of sns) {
+          switch (s.toLowerCase()) {
+            case "bluesky":
+              await postToBluesky(denops, prompt);
+              break;
+            case "mastodon":
+              await postToMastodon(denops, prompt);
+              break;
+            case "slack":
+              await postToSlack(denops, prompt);
+              break;
+            case "twitter":
+            case "x":
+              await postToX(denops, prompt);
+              break;
+            default:
+              await denops.cmd(`echom "Unknown SNS: ${s}"`);
+          }
+        }
+        await denops.cmd(`bdelete! ${bufnr}`);
       },
       { pattern: "[<f-args>]" },
     ),

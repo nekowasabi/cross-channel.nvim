@@ -331,3 +331,37 @@ export async function postToX(
     await denops.cmd(`echom "X.com投稿成功: ${json.id}"`);
   }
 }
+
+/**
+ * postSelectExec dispatcher function: 引数で指定されたSNSに複数投稿
+ * @param {Denops} denops - Denops instance
+ * @param {...string} sns - 投稿先のSNS名のリスト
+ */
+export async function postSelectExec(
+  denops: Denops,
+  ...sns: string[]
+): Promise<void> {
+  const bufnr = ensure(await fn.nvim_get_current_buf(denops), is.Number);
+  const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
+  const prompt = lines.join("\n");
+  for (const s of sns) {
+    switch (s.toLowerCase()) {
+      case "bluesky":
+        await postToBluesky(denops, prompt);
+        break;
+      case "mastodon":
+        await postToMastodon(denops, prompt);
+        break;
+      case "slack":
+        await postToSlack(denops, prompt);
+        break;
+      case "twitter":
+      case "x":
+        await postToX(denops, prompt);
+        break;
+      default:
+        await denops.cmd(`echom "Unknown SNS: ${s}"`);
+    }
+  }
+  await fn.nvim_buf_delete(denops, bufnr, {});
+}

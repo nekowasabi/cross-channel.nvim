@@ -94,7 +94,7 @@ export async function main(denops: Denops): Promise<void> {
         await n.nvim_create_buf(denops, false, true),
         is.Number,
       );
-      await buffer.openFloatingWindow(denops, bufnr);
+      await buffer.openFloatingWindow(denops, bufnr, "Bluesky, Mastodon, X");
     }),
     // <CR>押下時の投稿処理
     await command("postFloating", "0", async () => {
@@ -164,7 +164,7 @@ export async function main(denops: Denops): Promise<void> {
           await n.nvim_create_buf(denops, false, true),
           is.Number,
         );
-        await buffer.openFloatingWindow(denops, bufnr);
+        await buffer.openFloatingWindow(denops, bufnr, sns.join(", "));
         // <CR> で postSelectExec を呼び出し
         await denops.cmd(
           `nnoremap <buffer> <CR> <cmd>call denops#notify("${denops.name}", "postSelectExec", ${

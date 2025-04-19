@@ -19,11 +19,13 @@ export type BufferLayout = (typeof bufferLayouts)[number];
  *
  * @param {Denops} denops - The Denops instance.
  * @param {number} bufnr - The buffer number.
+ * @param {string} title - The title of the floating window.
  * @returns {Promise<void>}
  */
 export async function openFloatingWindow(
   denops: Denops,
   bufnr: number,
+  title: string = "",
 ): Promise<void> {
   const terminal_width = Math.floor(
     ensure(await n.nvim_get_option(denops, "columns"), is.Number),
@@ -91,6 +93,8 @@ export async function openFloatingWindow(
     height: floatWinHeight,
     row: row,
     col: col,
+    title: title,
+    title_pos: "center" as const,
   };
   const opts:
     | typeof optsWithoutStyle

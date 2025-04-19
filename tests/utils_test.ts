@@ -2,6 +2,7 @@
 declare const Deno: any;
 import { assertEquals, assert } from "https://deno.land/std@0.115.1/testing/asserts.ts";
 import { postToBluesky, postToMastodon, postToX } from "../denops/cross-channel/utils.ts";
+import * as variable from "https://deno.land/x/denops_std@v6.5.1/variable/mod.ts";
 
 // Fake Denops interface
 class FakeDenops {
@@ -88,4 +89,51 @@ Deno.test("postToMastodon: 正常にリクエストを送信し、成功メッ�
 
   // 成功メッセージが denops.cmd で送信されている
   assertEquals(fakeDenops.cmds[0], "echom \"Mastodon\u30d7\u30ed\u30b0\u30e9\u30e0\u6210\u529f\"");
+});
+
+// postToXのユニットテスト
+Deno.test("postToX: 正常にリクエストを送信する", async () => {
+  const fakeDenops = new FakeDenops();
+  const fakeSession = {
+    consumerKey: "ck",
+    consumerSecret: "cs",
+    accessToken: "at",
+    accessTokenSecret: "ats",
+  };
+  // stub v.g.get
+  (variable.g.get as any) = async (_denops: unknown, key: string) => {
+    switch (key) {
+      case "crosschannel_x_consumer_key":
+        return fakeSession.consumerKey;
+      case "crosschannel_x_consumer_secret":
+        return fakeSession.consumerSecret;
+      case "crosschannel_x_access_token":
+        return fakeSession.accessToken;
+      case "crosschannel_x_access_token_secret":
+        return fakeSession.accessTokenSecret;
+    }
+  };
+  // stub fetch
+  type FetchCall = { url: string; options: RequestInit };
+  const calls: FetchCall[] = [];
+  globalThis.fetch = async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const url = typeof input === "string" ? input : input.toString();
+    calls.push({ url, options: init! });
+    return { json: async () => ({}), ok: true } as Response;
+  };
+  const text = "Hello X";
+  await postToX(fakeDenops as any, text);
+
+  assert(calls.length === 1, "fetch should be called once");
+  assertEquals(calls[0].url, "https://api.twitter.com/2/tweets");
+  const opts = calls[0].options;
+  assertEquals(opts.method, "POST");
+  const headers = opts.headers as Record<string,string>;
+  assert(headers["Authorization"].startsWith("OAuth "));
+  assertEquals(headers["Content-Type"], "application/json");
+  assertEquals(opts.body, JSON.stringify({ text }));
+  assertEquals(fakeDenops.cmds.length, 0);
 });

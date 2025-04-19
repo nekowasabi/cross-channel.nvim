@@ -1,7 +1,6 @@
 /// <reference lib="deno.ns" />
 declare const Deno: any;
 
-import * as fn from "https://deno.land/x/denops_std@v6.5.1/function/mod.ts";
 import type { Denops } from "https://deno.land/x/denops_std@v6.5.1/mod.ts";
 import * as n from "https://deno.land/x/denops_std@v6.5.1/function/nvim/mod.ts";
 import * as v from "https://deno.land/x/denops_std@v6.5.1/variable/mod.ts";
@@ -13,16 +12,6 @@ const CONFIG_DIR = (() => {
   if (!home) throw new Error("HOME environment variable is not set");
   return `${home}/.config/cross-channel`;
 })();
-
-/**
- * Gets the current file path.
- * @param {Denops} denops - The Denops instance.
- * @returns {Promise<string>} A promise that resolves to the current file path.
- */
-export async function getCurrentFilePath(denops: Denops): Promise<string> {
-  const path = await fn.expand(denops, "%:p");
-  return ensure(path, is.String);
-}
 
 /**
  * Authenticate with Bluesky.

@@ -3,10 +3,8 @@ import * as buffer from "./bufferOperation.ts";
 import {
   authenticateBluesky,
   authenticateMastodon,
-  authenticateSlack,
   postToBluesky,
   postToMastodon,
-  postToSlack,
   postToX,
 } from "./utils.ts";
 import * as n from "https://deno.land/x/denops_std@v6.5.1/function/nvim/mod.ts";
@@ -105,7 +103,12 @@ export async function main(denops: Denops): Promise<void> {
       const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
       const message = lines.join("\n");
       // 投稿実行
-      await authenticateBluesky(denops);
+      try {
+        await authenticateBluesky(denops);
+      } catch (e) {
+        await denops.cmd(`echom "${e.message}"`);
+        return;
+      }
       await postToBluesky(denops, message);
       await postToMastodon(denops, message);
       await postToX(denops, message);
@@ -123,12 +126,10 @@ export async function main(denops: Denops): Promise<void> {
      */
     await command(
       "test",
-      "1",
-      async (cmd: string) => {
-        const prompt = `/test ${cmd}`;
-        await buffer.sendPrompt(denops, prompt);
+      "0",
+      async () => {
+        await authenticateMastodon(denops);
       },
-      { pattern: "[<f-args>]", complete: "shellcmd" },
     ),
     /**
      * CrossChannelSetup: 各SNSの初回認証を行うコマンド
@@ -147,7 +148,6 @@ export async function main(denops: Denops): Promise<void> {
         > = {
           bluesky: authenticateBluesky,
           mastodon: authenticateMastodon,
-          slack: authenticateSlack,
         };
         const authenticate = authenticators[sns] ??
           ((d) => d.cmd(`echo "Unknown SNS: ${sns}"`));
@@ -196,14 +196,17 @@ export async function main(denops: Denops): Promise<void> {
             await postToBluesky(denops, prompt);
           },
           mastodon: postToMastodon,
-          slack: postToSlack,
           twitter: postToX,
           x: postToX,
         };
         for (const s of sns) {
-          const fn = posterMap[s.toLowerCase()];
-          if (fn) {
-            await fn(denops, message);
+          const fnPoster = posterMap[s.toLowerCase()];
+          if (fnPoster) {
+            try {
+              await fnPoster(denops, message);
+            } catch (e) {
+              await denops.cmd(`echom "${e.message}"`);
+            }
           } else {
             await denops.cmd(`echom "Unknown SNS: ${s}"`);
           }

@@ -117,4 +117,8 @@ export async function openFloatingWindow(
   await denops.cmd(
     `nnoremap <buffer> <CR> <cmd>call denops#notify("${denops.name}", "postFloating", [])<CR>`,
   );
+  // 普通モードで q を押すとウィンドウを閉じる
+  await denops.cmd(
+    `nnoremap <buffer> q <cmd>close<CR>`,
+  );
 }

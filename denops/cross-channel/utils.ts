@@ -23,13 +23,14 @@ export async function getCurrentFilePath(denops: Denops): Promise<string> {
  * @returns {Promise<void>} A promise that resolves when authentication is complete.
  */
 export async function authenticateBluesky(denops: Denops): Promise<void> {
-  const idVal = await v.g.get(denops, "crosschannel_bluesky_id");
-  const passVal = await v.g.get(denops, "crosschannel_bluesky_password");
-  if (!is.String(idVal) || !is.String(passVal)) {
-    throw new Error("Bluesky認証情報が設定されていません: g:crosschannel_bluesky_id, g:crosschannel_bluesky_password を設定してください");
-  }
-  const id = idVal;
-  const pass = passVal;
+  const id = ensure(
+    await v.g.get(denops, "crosschannel_bluesky_id"),
+    is.String,
+  );
+  const pass = ensure(
+    await v.g.get(denops, "crosschannel_bluesky_password"),
+    is.String,
+  );
   const sessionUrl =
     "https://bsky.social/xrpc/com.atproto.server.createSession";
 

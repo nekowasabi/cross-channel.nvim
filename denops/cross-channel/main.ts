@@ -1,8 +1,7 @@
 import type { Denops } from "https://deno.land/x/denops_std@v6.5.1/mod.ts";
 import * as buffer from "./bufferOperation.ts";
+import { authenticateBluesky, authenticateMastodon } from "./auth.ts";
 import {
-  authenticateBluesky,
-  authenticateMastodon,
   postToBluesky,
   postToMastodon,
   postToX,

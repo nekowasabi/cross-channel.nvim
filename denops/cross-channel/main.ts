@@ -103,11 +103,12 @@ export async function main(denops: Denops): Promise<void> {
       const bufnr = ensure(await n.nvim_get_current_buf(denops), is.Number);
       // バッファ内容取得
       const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
-      const prompt = lines.join("\n");
+      const message = lines.join("\n");
       // 投稿実行
-      await postToBluesky(denops, prompt);
-      await postToMastodon(denops, prompt);
-      await postToX(denops, prompt);
+      await authenticateBluesky(denops);
+      await postToBluesky(denops, message);
+      await postToMastodon(denops, message);
+      await postToX(denops, message);
       // ウィンドウを閉じる
       await denops.cmd(`bdelete! ${bufnr}`);
     }),
@@ -185,24 +186,26 @@ export async function main(denops: Denops): Promise<void> {
           1,
           "$",
         ) as string[];
-        const prompt = lines.join("\n");
+        const message = lines.join("\n");
+        const posterMap: Record<
+          string,
+          (denops: Denops, prompt: string) => Promise<void>
+        > = {
+          bluesky: async (denops, prompt) => {
+            await authenticateBluesky(denops);
+            await postToBluesky(denops, prompt);
+          },
+          mastodon: postToMastodon,
+          slack: postToSlack,
+          twitter: postToX,
+          x: postToX,
+        };
         for (const s of sns) {
-          switch (s.toLowerCase()) {
-            case "bluesky":
-              await postToBluesky(denops, prompt);
-              break;
-            case "mastodon":
-              await postToMastodon(denops, prompt);
-              break;
-            case "slack":
-              await postToSlack(denops, prompt);
-              break;
-            case "twitter":
-            case "x":
-              await postToX(denops, prompt);
-              break;
-            default:
-              await denops.cmd(`echom "Unknown SNS: ${s}"`);
+          const fn = posterMap[s.toLowerCase()];
+          if (fn) {
+            await fn(denops, message);
+          } else {
+            await denops.cmd(`echom "Unknown SNS: ${s}"`);
           }
         }
         await denops.cmd(`bdelete! ${bufnr}`);

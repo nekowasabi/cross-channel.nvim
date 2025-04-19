@@ -105,7 +105,7 @@ export async function postToBluesky(
   const home = Deno.env.get("HOME")!;
   const file = `${home}/.config/cross-channel/bluesky_session.json`;
   const session = JSON.parse(await Deno.readTextFile(file));
-  const content = text.replaceAll("\n", "\\n");
+  const content = text;
   const body = {
     repo: session.did,
     collection: "app.bsky.feed.post",

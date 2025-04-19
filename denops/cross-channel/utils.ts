@@ -16,19 +16,16 @@ const CONFIG_DIR = (() => {
 // SNS registry
 export const snsList = ["bluesky", "mastodon", "x"] as const;
 export type SNS = typeof snsList[number];
-// SNSごとの認証関数マップ
-import { authenticateBluesky, authenticateMastodon } from "./auth.ts";
-export const authenticators: Record<SNS, (denops: Denops) => Promise<void>> = {
-  bluesky: authenticateBluesky,
-  mastodon: authenticateMastodon,
-  x: async (_denops: Denops) => Promise.resolve(),
-};
-// SNSごとの投稿関数マップ
-import { postToBluesky, postToMastodon, postToX } from "./post.ts";
-export const posters: Record<SNS, (denops: Denops, text: string) => Promise<void>> = {
-  bluesky: postToBluesky,
-  mastodon: postToMastodon,
-  x: postToX,
+
+import type { SNSDriver } from "./driver.ts";
+import { BlueskyDriver } from "./drivers/bluesky.ts";
+import { MastodonDriver } from "./drivers/mastodon.ts";
+import { XDriver } from "./drivers/x.ts";
+
+export const drivers: Record<SNS, SNSDriver> = {
+  bluesky: BlueskyDriver,
+  mastodon: MastodonDriver,
+  x: XDriver,
 };
 
 export { postToBluesky, postToMastodon, postToX } from "./post.ts";
@@ -48,19 +45,24 @@ export async function postSelectExec(
   const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
   const prompt = lines.join("\n");
   for (const s of sns) {
-    switch (s.toLowerCase()) {
-      case "bluesky":
-        await postToBluesky(denops, prompt);
-        break;
-      case "mastodon":
-        await postToMastodon(denops, prompt);
-        break;
-      case "twitter":
-      case "x":
-        await postToX(denops, prompt);
-        break;
-      default:
-        await denops.cmd(`echom "Unknown SNS: ${s}"`);
+    const key = s.toLowerCase() as SNS;
+    const driver = drivers[key];
+    if (!driver) {
+      await denops.cmd(`echom "Unknown SNS: ${s}"`);
+      continue;
+    }
+    try {
+      await driver.authenticate(denops);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await denops.cmd(`echom "${msg}"`);
+      continue;
+    }
+    try {
+      await driver.post(denops, prompt);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await denops.cmd(`echom "${msg}"`);
     }
   }
 }

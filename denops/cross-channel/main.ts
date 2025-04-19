@@ -4,8 +4,7 @@ import { authenticateBluesky, authenticateMastodon } from "./auth.ts";
 import { postToBluesky, postToMastodon, postToX } from "./post.ts";
 import {
   snsList,
-  authenticators,
-  posters,
+  drivers,
   SNS,
 } from "./utils.ts";
 import * as n from "https://deno.land/x/denops_std@v6.5.1/function/nvim/mod.ts";
@@ -105,12 +104,15 @@ export async function main(denops: Denops): Promise<void> {
       const message = lines.join("\n");
       // 各SNSで認証・投稿
       for (const sns of snsList) {
-        const auth = authenticators[sns];
-        if (auth) {
-          try { await auth(denops); } catch (e) { await denops.cmd(`echom "${e.message}"`); continue; }
+        const driver = drivers[sns];
+        try {
+          await driver.authenticate(denops);
+        } catch (e) {
+          await denops.cmd(`echom "${e.message}"`);
+          continue;
         }
         try {
-          await posters[sns](denops, message);
+          await driver.post(denops, message);
         } catch (e) {
           await denops.cmd(`echom "${e.message}"`);
         }
@@ -145,8 +147,12 @@ export async function main(denops: Denops): Promise<void> {
       "1",
       async (sns: string) => {
         const key = sns as SNS;
-        const auth = authenticators[key] ?? (_ => denops.cmd(`echo "Unknown SNS: ${sns}"`));
-        await auth(denops);
+        const driver = drivers[key];
+        if (!driver) {
+          await denops.cmd(`echo "Unknown SNS: ${sns}"`);
+          return;
+        }
+        await driver.authenticate(denops);
       },
       { pattern: "[<f-args>]" },
     ),

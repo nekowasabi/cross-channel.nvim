@@ -6,6 +6,10 @@ import {
   postToBluesky,
   postToMastodon,
   postToX,
+  snsList,
+  authenticators,
+  posters,
+  SNS,
 } from "./utils.ts";
 import * as n from "https://deno.land/x/denops_std@v6.5.1/function/nvim/mod.ts";
 import { ensure, is } from "https://deno.land/x/unknownutil@v3.18.1/mod.ts";
@@ -94,7 +98,7 @@ export async function main(denops: Denops): Promise<void> {
         await n.nvim_create_buf(denops, false, true),
         is.Number,
       );
-      await buffer.openFloatingWindow(denops, bufnr, "Bluesky, Mastodon, X");
+      await buffer.openFloatingWindow(denops, bufnr, snsList.join(", "));
     }),
     // <CR>押下時の投稿処理
     await command("postFloating", "0", async () => {
@@ -102,16 +106,18 @@ export async function main(denops: Denops): Promise<void> {
       // バッファ内容取得
       const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
       const message = lines.join("\n");
-      // 投稿実行
-      try {
-        await authenticateBluesky(denops);
-      } catch (e) {
-        await denops.cmd(`echom "${e.message}"`);
-        return;
+      // 各SNSで認証・投稿
+      for (const sns of snsList) {
+        const auth = authenticators[sns];
+        if (auth) {
+          try { await auth(denops); } catch (e) { await denops.cmd(`echom "${e.message}"`); continue; }
+        }
+        try {
+          await posters[sns](denops, message);
+        } catch (e) {
+          await denops.cmd(`echom "${e.message}"`);
+        }
       }
-      await postToBluesky(denops, message);
-      await postToMastodon(denops, message);
-      await postToX(denops, message);
       // ウィンドウを閉じる
       await denops.cmd(`bdelete! ${bufnr}`);
     }),
@@ -141,17 +147,9 @@ export async function main(denops: Denops): Promise<void> {
       "setup",
       "1",
       async (sns: string) => {
-        // SNSごとの認証処理をマップで定義（strategyパターン）
-        const authenticators: Record<
-          string,
-          (denops: Denops) => Promise<void>
-        > = {
-          bluesky: authenticateBluesky,
-          mastodon: authenticateMastodon,
-        };
-        const authenticate = authenticators[sns] ??
-          ((d) => d.cmd(`echo "Unknown SNS: ${sns}"`));
-        await authenticate(denops);
+        const key = sns as SNS;
+        const auth = authenticators[key] ?? (_ => denops.cmd(`echo "Unknown SNS: ${sns}"`));
+        await auth(denops);
       },
       { pattern: "[<f-args>]" },
     ),
@@ -180,40 +178,22 @@ export async function main(denops: Denops): Promise<void> {
       "*",
       async (...sns: string[]) => {
         const bufnr = ensure(await n.nvim_get_current_buf(denops), is.Number);
-        const lines = await denops.call(
-          "getbufline",
-          bufnr,
-          1,
-          "$",
-        ) as string[];
+        const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
         const message = lines.join("\n");
-        const posterMap: Record<
-          string,
-          (denops: Denops, prompt: string) => Promise<void>
-        > = {
-          bluesky: async (denops, prompt) => {
-            await authenticateBluesky(denops);
-            await postToBluesky(denops, prompt);
-          },
-          mastodon: postToMastodon,
-          twitter: postToX,
-          x: postToX,
-        };
-        // SNSごとに投稿を実行するヘルパー
-        const postSns = async (snsName: string) => {
-          const fnPoster = posterMap[snsName.toLowerCase()];
-          if (!fnPoster) {
-            await denops.cmd(`echom "Unknown SNS: ${snsName}"`);
-            return;
+        for (const s of sns) {
+          const key = s as SNS;
+          const auth = authenticators[key];
+          if (auth) { try { await auth(denops); } catch (e) { await denops.cmd(`echom "${e.message}"`); continue; } }
+          const poster = posters[key];
+          if (!poster) {
+            await denops.cmd(`echom "Unknown SNS: ${s}"`);
+            continue;
           }
           try {
-            await fnPoster(denops, message);
+            await poster(denops, message);
           } catch (e) {
             await denops.cmd(`echom "${e.message}"`);
           }
-        };
-        for (const s of sns) {
-          await postSns(s);
         }
         await denops.cmd(`bdelete! ${bufnr}`);
       },

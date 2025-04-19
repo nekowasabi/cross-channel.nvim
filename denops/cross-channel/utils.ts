@@ -13,6 +13,22 @@ const CONFIG_DIR = (() => {
   return `${home}/.config/cross-channel`;
 })();
 
+// SNS registry
+export const snsList = ["bluesky", "mastodon", "x"] as const;
+export type SNS = typeof snsList[number];
+// SNSごとの認証関数マップ
+export const authenticators: Record<SNS, (denops: Denops) => Promise<void>> = {
+  bluesky: authenticateBluesky,
+  mastodon: authenticateMastodon,
+  x: async (_denops: Denops) => Promise.resolve(),
+};
+// SNSごとの投稿関数マップ
+export const posters: Record<SNS, (denops: Denops, text: string) => Promise<void>> = {
+  bluesky: postToBluesky,
+  mastodon: postToMastodon,
+  x: postToX,
+};
+
 /**
  * Authenticate with Bluesky.
  * @param {Denops} denops - The Denops instance.

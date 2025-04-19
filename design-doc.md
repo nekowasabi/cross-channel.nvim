@@ -10,7 +10,7 @@
 - 拡張性の高いプラグインアーキテクチャ
 
 ## 3. スコープ
-- Twitter, Mastodon, Slack
+- Bluesky, Mastodon, X (formerly Twitter)
 - テキスト投稿のみ（画像／メディアは次フェーズ）  
 - 非同期処理によるレスポンス保持
 
@@ -33,59 +33,30 @@
 
 ## 7. アーキテクチャ
 ### 7.1 プラグインディレクトリ構成
-- `./adapters/` ディレクトリ配下に各SNSごとのモジュールを置く  
-  - 例：`adapters/twitter.ts`、`adapters/mastodon.ts`、`adapters/slack.ts` など  
-- `./denops/`：Denops プラグインのエントリポイント（`denops/cross-channel/...`）  
-- `./tests/`：ユニットおよび統合テスト配置（`tests/adapters/`, `tests/core/`, `tests/denops/`）  
+- `denops/cross-channel/`: Denops プラグイン本体（`main.ts`, `bufferOperation.ts`, `utils.ts`）
+- `tests/`: ユニットテスト（`utils_test.ts`, `main_test.ts` など）
+- ドキュメント: `README.md`, `design-doc.md`, `.windsurfrules`
 
-### 7.2 抽象インタフェース（SNSAdapter）
-```ts
-export interface SNSAdapter {
-  /** プラグイン名（設定ファイルのキーと一致） */
-  name: string;
-  /** 初期化／認証済みかチェック */
-  init(config: Config): Promise<void>;
-  /** 投稿実行 */
-  post(content: string): Promise<PostResult>;
-  /** 認証フロー開始（CPAuth 呼び出し時に利用） */
-  authenticate(): Promise<void>;
-} 
+### 7.2 モジュール構成
+- `main.ts`: Denops エントリポイント、コマンド登録と dispatcher 定義
+- `bufferOperation.ts`: Floating window 操作、キー マッピング、仮想テキスト表示
+- `utils.ts`: 各SNS (Bluesky, Mastodon, X) の認証／投稿 関数
+- `tests/`: 各モジュールのユニットテスト
 
 ### 7.3 アーキテクチャ図
 ```text
-[Neovim]─Denops→[PluginLoader]→[AdapterRegistry]→[SNSAdapter*]→[HTTP/Fetch]
+[Neovim]─Denops → [denops/cross-channel] → [utils] → [HTTP/Fetch]
                              │
                              └→[ConfigManager]
 ```
 
-### 7.4 プラグインローダー
-- 起動時に `Deno.readDir("./adapters")` でモジュール検出
-- `await import()` で動的ロード
-- `module.default` を `AdapterRegistry` に登録
-
-### 7.5 AdapterRegistry
-```ts
-class AdapterRegistry {
-  private adapters = new Map<string, SNSAdapter>();
-  register(adapter: SNSAdapter) {
-    this.adapters.set(adapter.name, adapter);
-  }
-  list(): SNSAdapter[] {
-    return [...this.adapters.values()];
-  }
-}
-```
-
-### 7.6 Core Module
-- `main.ts`: Denops エントリポイント、コマンド登録
-- `pluginLoader.ts`: adapters ディレクトリ走査と動的ロード
-- `adapterRegistry.ts`: 登録済 Adapter 管理
-- `postManager.ts`: 投稿ワークフロー制御
+### 7.4 Core Module
+- `main.ts`, `bufferOperation.ts`, `utils.ts`
+- 認証 (authenticateBluesky, ...)、投稿 (postToX, ...) ロジックを実装
 - `config.ts`: `config.toml` 読み込みとバリデーション
 
-### 7.7 データフロー
-1. `:CrossPost` 実行 → floating window で入力
-2. `postManager` が入力内容を取得
-3. `AdapterRegistry.list()` の各 `post()` を並列実行
-4. 結果を集約 → コマンドラインに表示
-
+### 7.5 データフロー
+1. `:CrossChannelPost` (または `:postSelect`) 実行 → floating window 表示
+2. ユーザーが入力後、Normal モードで `<CR>` 押下 → Denops dispatcher 呼び出し
+3. `utils` の各投稿関数 (Bluesky/Mastodon/X) を順次実行
+4. 結果をコマンドラインに表示し、ウィンドウを閉じる

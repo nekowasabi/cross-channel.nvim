@@ -63,8 +63,25 @@ export async function authenticateMastodon(denops: Denops): Promise<void> {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const body = await res.text();
-  if (res.status !== 200) {
-    throw new Error(`Mastodon認証に失敗しました: ${body}`);
+
+  if (!res.ok) {
+    try {
+      const errorBody = await res.json();
+      throw new Error(
+        `Mastodon認証に失敗しました: ${res.status} ${
+          JSON.stringify(errorBody)
+        }`,
+      );
+    } catch (e) {
+      // JSON解析に失敗した場合はテキストで取得
+      const errorText = await res.text();
+      throw new Error(`Mastodon認証に失敗しました: ${res.status} ${errorText}`);
+    }
   }
+
+  // セッション情報をファイルに保存
+  const sessionData = { host, accessToken: token };
+  await Deno.mkdir(CONFIG_DIR, { recursive: true });
+  const file = `${CONFIG_DIR}/mastodon_session.json`;
+  await Deno.writeTextFile(file, JSON.stringify(sessionData, null, 2));
 }

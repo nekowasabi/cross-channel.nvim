@@ -105,6 +105,9 @@ export async function openFloatingWindow(
 
   const winid = await n.nvim_open_win(denops, bufnr, true, opts);
 
+  const hashTag = await v.g.get(denops, "hashtag") as string;
+  await n.nvim_buf_set_lines(denops, bufnr, 0, 1, false, [hashTag]);
+
   // ウィンドウの透明度を設定
   await n.nvim_win_set_option(denops, winid, "winblend", floatWinBlend);
 
@@ -125,10 +128,10 @@ export async function openFloatingWindow(
   await denops.cmd(`nnoremap <buffer> q <cmd>close<CR>`);
 
   // 仮想テキストで操作方法を表示
-  const ns = await n.nvim_create_namespace(denops, 'crosschannel');
+  const ns = await n.nvim_create_namespace(denops, "crosschannel");
   await n.nvim_buf_set_extmark(denops, bufnr, ns, 0, 0, {
     virt_text: [["<CR> to post", "Comment"], [" q to close", "Comment"]],
-    virt_text_pos: 'eol',
+    virt_text_pos: "eol",
   });
   // Insertモードに入ったら操作案内を消す
   await denops.cmd(

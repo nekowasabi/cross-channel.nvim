@@ -97,11 +97,7 @@ export async function main(denops: Denops): Promise<void> {
       const bufnr = ensure(await n.nvim_get_current_buf(denops), is.Number);
       // バッファ内容取得
       const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
-      let message = lines.join("\n");
-      const hashTag = await v.g.get(denops, "hashtag") as string;
-      if (hashTag) {
-        message += ` ${hashTag}`;
-      }
+      const message = lines.join("\n");
       // 各SNSで認証・投稿
       for (const sns of snsList) {
         const driver = drivers[sns];

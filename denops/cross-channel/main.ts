@@ -4,6 +4,7 @@ import { authenticateMastodon } from "./auth.ts";
 import { drivers, SNS, snsList } from "./utils.ts";
 import * as n from "https://deno.land/x/denops_std@v6.5.1/function/nvim/mod.ts";
 import { ensure, is } from "https://deno.land/x/unknownutil@v3.18.1/mod.ts";
+import * as v from "https://deno.land/x/denops_std@v6.5.1/variable/mod.ts";
 
 /**
  * The main function that sets up the Aider plugin functionality.
@@ -96,7 +97,11 @@ export async function main(denops: Denops): Promise<void> {
       const bufnr = ensure(await n.nvim_get_current_buf(denops), is.Number);
       // バッファ内容取得
       const lines = await denops.call("getbufline", bufnr, 1, "$") as string[];
-      const message = lines.join("\n");
+      let message = lines.join("\n");
+      const hashTag = await v.g.get(denops, "hashtag") as string;
+      if (hashTag) {
+        message += ` ${hashTag}`;
+      }
       // 各SNSで認証・投稿
       for (const sns of snsList) {
         const driver = drivers[sns];
